@@ -8,6 +8,8 @@ namespace PureMVC
     class NotifierString
     {
         public const string STARTUP = "startup";
+        public const string ADDUSER = "add";
+        public const string DELETEUSER = "delete";
     }
     class StartupCommand : SimpleCommand, ICommand
     {
@@ -15,6 +17,11 @@ namespace PureMVC
         {
             base.Execute(noftication);
 
+            Facade.RegisterProxy(new UserProxy());
+            //执行
+            Program cs = (Program)noftication.Body;
+
+            Facade.RegisterMediator(new UsetListMediator(cs.form));
             //基类执行
             Console.WriteLine(noftication.ToString());
         }
@@ -31,7 +38,7 @@ namespace PureMVC
     }
 
     //proxy
-    class UserProxy : Proxy, IProxy
+    class UserProxy : Proxy
     {
         public new const string NAME = "UserProxy";
 
@@ -75,7 +82,98 @@ namespace PureMVC
         }
     }
 
-    //mediator视图管理
+    //mediator视图管理，
+    //最先操作，然后传个给mediator,（而mediator很早就注册了meditor操作的方法）
+    class UserListForm
+    {
+        //接收操作
+        public Action<int> m_pOperator;
+
+        public void Operator(int i)
+        {
+            if (m_pOperator != null)
+            {
+                //
+                m_pOperator(i);     //操作
+            }
+        }
+    }
+
+    class UsetListMediator : Mediator
+    {
+        private UserProxy proxy;
+
+        public new const string NAME = "UseListMediator";
+
+        public UsetListMediator(UserListForm form)
+            : base(NAME, form)
+        {
+            form.m_pOperator += Operator;       //操作方法
+        }
+
+
+        public void Operator(int i)
+        {
+            //真实调用
+            char ch = (char)i;
+            switch (ch)
+            {
+                case 'a':
+                    proxy.AddUser(new UserData("user" + i, "123456"));
+                    break;
+                case 'b':
+                    Facade.SendNotification(NotifierString.ADDUSER);
+                    break;
+                case 'd':
+                    Facade.SendNotification(NotifierString.DELETEUSER);
+                    break;
+            }
+            
+        }
+
+
+        private UserListForm UseList
+        {
+            get
+            {
+                return (UserListForm)ViewComponent; //获取list
+            }
+        }
+
+
+        //操作方法,注册时重载
+        public override IList<string> ListNotificationInterests()
+        {
+            IList<string> list = new List<string>();
+            list.Add(NotifierString.ADDUSER);
+            list.Add(NotifierString.DELETEUSER);
+            return list;
+        }
+
+        //获取注册数据
+        public override void OnRegister()
+        {
+            base.OnRegister();
+            proxy = (UserProxy)Facade.RetrieveProxy(UserProxy.NAME);
+        }
+
+        public override void HandleNotification(INotification notification)
+        {
+            switch (notification.Name)
+            {
+                case NotifierString.ADDUSER:
+                    {
+                        proxy.AddUser(new UserData("user123456", "123456"));
+                    }
+                    break;
+                case NotifierString.DELETEUSER:
+                    {
+                        proxy.DeleteUser(new UserData("user123456", "123456"));
+                    }
+                    break;
+            }
+        }
+    }
 
     class ApplicationFacade : Facade,IFacade
     {
@@ -122,13 +220,23 @@ namespace PureMVC
     class Program
     {
         public int i = 10;
+        public UserListForm form = new UserListForm();
+
         static void Main(string[] args)
         {
             Program cs = new Program();
+            
             ApplicationFacade facade = (ApplicationFacade)ApplicationFacade.Instance;
             facade.Startup(cs);
 
-            Console.Read();
+            //读取
+            int ch = 0;
+
+            while((ch = Console.Read()) != 9)
+            {
+                cs.form.Operator(ch);
+            }
+           // Console.Read();
         }
     }
 }
